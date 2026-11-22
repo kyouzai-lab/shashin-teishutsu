@@ -32,8 +32,8 @@ Firebase を設定する前は「デモモード」で動きます。写真は�
 2. 表示される `firebaseConfig` の中身を、`common.js` の一番上の `firebaseConfig` に貼る
 
 ## ステップ4：GitHub Pages に置く
-- 例：`https://hal-88.github.io/shashin-teishutsu/`（児童用）
-- 先生用は `https://hal-88.github.io/shashin-teishutsu/sensei.html`（児童ページからはリンクしていない）
+- 例：`https://kyouzai-lab.github.io/shashin-teishutsu/`（児童用）
+- 先生用は `https://kyouzai-lab.github.io/shashin-teishutsu/sensei.html`（児童ページからはリンクしていない）
 
 ## 使い方
 - **児童**：クラス・番号を選び、写真を1〜3枚選ぶ → 「送る」。同じ番号でもう一度送ると、前の写真と入れかわる（前が3枚で今回1枚なら、1枚だけになる）
