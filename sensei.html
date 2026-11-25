@@ -49,10 +49,19 @@
   .msg{color:var(--sub);text-align:center;padding:40px 0;font-size:16px}
   .msg.err{color:var(--err)}
 
-  /* 一覧（画面ではページの区切りが見えるように） */
-  .page{background:#fff;border:1px solid var(--line);border-radius:6px;padding:18px 20px 6px;margin-bottom:18px;position:relative}
-  .pageno{position:absolute;right:12px;top:6px;font-size:12px;color:var(--sub)}
-  .row{margin-bottom:16px}
+  /* 一覧 */
+  .pickbar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:12px;font-size:15px}
+  .pickbar b{font-size:22px;color:var(--main)}
+  .pickbar button{font-size:14px;padding:6px 12px;border-radius:8px;border:1px solid var(--line);background:#fff;color:var(--ink)}
+  .pickhint{font-size:13px;color:var(--sub)}
+  .row{background:#fff;border:2px solid var(--line);border-radius:10px;padding:12px 14px 14px;margin-bottom:12px;transition:opacity .15s}
+  .row:not(.off){border-color:#b9d3df}
+  .row.off{opacity:.4}
+  .pick{display:inline-flex;align-items:center;gap:6px;background:var(--main-soft);color:var(--main-dark);font-weight:bold;
+    font-size:14px;border-radius:8px;padding:4px 10px 4px 6px;cursor:pointer;align-self:center}
+  .pick input{width:22px;height:22px;margin:0;accent-color:var(--main);cursor:pointer}
+  .row.off .pick{background:#eee;color:var(--sub)}
+  #printSheet{display:none}
   .label{display:flex;align-items:baseline;gap:8px;margin-bottom:6px}
   .label .no{font-size:22px;font-weight:bold}
   .label .cls{font-size:14px;color:var(--sub)}
@@ -63,7 +72,7 @@
   .frame.empty{visibility:hidden}
 
   .danger{margin-top:40px;border-top:1px dashed var(--line);padding-top:16px;text-align:right}
-  .danger button{font-size:14px;padding:8px 14px;border-radius:10px;border:2px solid var(--err);background:#fff;color:var(--err);font-weight:bold}
+  .danger button{font-size:14px;padding:8px 14px;border-radius:10px;border:2px solid var(--err);background:#fff;color:var(--err);font-weight:bold;margin-left:8px}
 
   dialog{border:none;border-radius:18px;padding:22px;max-width:min(92vw,440px);width:100%;color:var(--ink);box-shadow:0 20px 60px rgba(0,0,0,.25)}
   dialog::backdrop{background:rgba(30,25,20,.45)}
@@ -82,10 +91,11 @@
     html,body{background:#fff}
     body{padding:0}
     .wrap{max-width:none}
-    .noprint,header,.summary,.danger,.demo,.pageno,.label .time,dialog{display:none !important}
-    .page{border:none;border-radius:0;padding:0;margin:0;break-after:page;page-break-after:always}
+    .noprint,header,.summary,.danger,.demo,#sheet,.label .time,dialog{display:none !important}
+    #printSheet{display:block}
+    .page{break-after:page;page-break-after:always}
     .page:last-child{break-after:auto;page-break-after:auto}
-    .row{break-inside:avoid;page-break-inside:avoid;margin:0 0 9mm}
+    .row{break-inside:avoid;page-break-inside:avoid;margin:0 0 9mm;border:none;border-radius:0;padding:0;background:none;opacity:1}
     .label{margin-bottom:2mm}
     .label .no{font-size:16pt}
     .label .cls{font-size:10pt;color:#555}
@@ -118,13 +128,14 @@
     </header>
     <section class="summary" id="summary"></section>
     <main id="sheet"></main>
-    <div class="danger"><button id="delAll">全データ削除</button></div>
+    <div id="printSheet"></div>
+    <div class="danger"><button id="delCls"></button><button id="delAll">全データ削除</button></div>
   </div>
 </div>
 
 <dialog id="delDlg">
-  <h3>全データを削除します</h3>
-  <p>全クラスの写真がすべて消えます。<b>元にはもどせません。</b><br>よければ下に「さくじょ」と入力してください。</p>
+  <h3 id="delTitle"></h3>
+  <p><span id="delWhat"></span><b>元にはもどせません。</b><br>よければ下に「さくじょ」と入力してください。</p>
   <input id="delInput" autocomplete="off" placeholder="さくじょ">
   <div class="dbtns">
     <button class="no" id="delNo">やめる</button>
@@ -188,6 +199,7 @@ function renderTabs() {
     b.onclick = () => { if (loading || c.id === current) return; current = c.id; try { localStorage.setItem(TAB, current); } catch (e) {} load(); };
     $("tabs").appendChild(b);
   });
+  $("delCls").textContent = `${current}のデータを削除`;
 }
 
 /* ---- 読み込みと表示 ---- */
@@ -238,35 +250,83 @@ function render(list) {
 
   if (!nos.length) {
     $("sheet").innerHTML = `<div class="msg">まだ提出がありません</div>`;
+    updatePick();
     return;
   }
-  let html = "";
-  for (let s = 0, page = 1; s < nos.length; s += PER_PAGE, page++) {
-    html += `<section class="page"><span class="pageno">${page}ページ目</span>`;
-    for (const n of nos.slice(s, s + PER_PAGE)) {
-      const sub = byNo.get(n);
-      const cnt = sub.photos.filter(Boolean).length;
-      html += `<div class="row"><div class="label"><span class="no">${n}番</span><span class="cls">${esc(current)}</span><span class="time">${cnt < PHOTO_COUNT ? cnt + "まい・" : ""}${fmt(sub.updatedAt)}</span></div><div class="photos">`;
-      // 1〜2枚の人は左につめて、残りはあけておく（写真の大きさは全員同じ）
-      const ps = sub.photos.filter(Boolean);
-      for (let i = 0; i < PHOTO_COUNT; i++) {
-        const p = ps[i];
-        if (p) { const u = URL.createObjectURL(p.blob); urls.push(u); html += `<div class="frame"><img src="${u}" alt="${n}番 ${i + 1}まいめ"></div>`; }
-        else html += `<div class="frame empty"></div>`;
-      }
-      html += `</div></div>`;
+  let html = `<div class="pickbar">
+      <span>印刷する人：<b id="pickN"></b>人（<span id="pickP"></span>ページ）</span>
+      <button type="button" id="pickAll">全員えらぶ</button>
+      <button type="button" id="pickNone">全員はずす</button>
+      <span class="pickhint">チェックを外した人は印刷されません</span>
+    </div>`;
+  const off = excluded(current);
+  for (const n of nos) {
+    const sub = byNo.get(n);
+    const ps = sub.photos.filter(Boolean);
+    const on = !off.has(n);
+    html += `<div class="row${on ? "" : " off"}" data-no="${n}"><div class="label">
+        <label class="pick"><input type="checkbox" ${on ? "checked" : ""}><span>印刷</span></label>
+        <span class="no">${n}番</span><span class="cls">${esc(current)}</span>
+        <span class="time">${ps.length < PHOTO_COUNT ? ps.length + "まい・" : ""}${fmt(sub.updatedAt)}</span>
+      </div><div class="photos">`;
+    // 1〜2枚の人は左につめて、残りはあけておく（写真の大きさは全員同じ）
+    for (let i = 0; i < PHOTO_COUNT; i++) {
+      const p = ps[i];
+      if (p) { const u = URL.createObjectURL(p.blob); urls.push(u); html += `<div class="frame"><img src="${u}" alt="${n}番 ${i + 1}まいめ"></div>`; }
+      else html += `<div class="frame empty"></div>`;
     }
-    html += `</section>`;
+    html += `</div></div>`;
   }
   $("sheet").innerHTML = html;
-  $("print").disabled = false;
+  $("sheet").querySelectorAll(".row").forEach(row => {
+    row.querySelector("input").onchange = e => setPick(row, e.target.checked);
+  });
+  $("pickAll").onclick = () => $("sheet").querySelectorAll(".row").forEach(r => setPick(r, true));
+  $("pickNone").onclick = () => $("sheet").querySelectorAll(".row").forEach(r => setPick(r, false));
+  updatePick();
 }
+
+/* ---- 印刷する人をえらぶ（外した番号はクラスごとに覚えておく） ---- */
+const excludedBy = new Map();
+const excluded = cls => { if (!excludedBy.has(cls)) excludedBy.set(cls, new Set()); return excludedBy.get(cls); };
+function setPick(row, on) {
+  const n = Number(row.dataset.no);
+  on ? excluded(current).delete(n) : excluded(current).add(n);
+  row.classList.toggle("off", !on);
+  row.querySelector("input").checked = on;
+  updatePick();
+}
+const pickedRows = () => [...$("sheet").querySelectorAll(".row:not(.off)")];
+function updatePick() {
+  const n = pickedRows().length;
+  if ($("pickN")) { $("pickN").textContent = n; $("pickP").textContent = Math.ceil(n / PER_PAGE); }
+  $("print").disabled = !n;
+  $("print").textContent = n ? `印刷（${n}人）` : "印刷";
+}
+// 印刷用の紙面：えらんだ人だけを PER_PAGE 人ずつのページに分ける
+function buildPrint() {
+  const rows = pickedRows();
+  const out = $("printSheet");
+  out.innerHTML = "";
+  for (let s = 0; s < rows.length; s += PER_PAGE) {
+    const page = document.createElement("section");
+    page.className = "page";
+    rows.slice(s, s + PER_PAGE).forEach(r => {
+      const c = r.cloneNode(true);
+      c.querySelector(".pick").remove();
+      page.appendChild(c);
+    });
+    out.appendChild(page);
+  }
+  return out;
+}
+window.addEventListener("beforeprint", buildPrint); // Ctrl+P で印刷したときも同じにする
 
 $("reload").onclick = () => { if (!loading) load(); };
 
 /* ---- 印刷 ---- */
 $("print").onclick = async () => {
-  const imgs = [...document.querySelectorAll("#sheet img")];
+  const imgs = [...buildPrint().querySelectorAll("img")];
   await Promise.all(imgs.map(i => (i.decode ? i.decode() : Promise.resolve()).catch(() => {})));
   const t = document.title;
   document.title = `写真ていしゅつ_${current}`;
@@ -274,15 +334,25 @@ $("print").onclick = async () => {
   setTimeout(() => { document.title = t; }, 500);
 };
 
-/* ---- 全データ削除 ---- */
-$("delAll").onclick = () => { $("delInput").value = ""; $("delYes").disabled = true; $("delDlg").showModal(); };
+/* ---- 削除（このクラスだけ / 全クラス） ---- */
+let delTarget = null; // クラス名。null なら全クラス
+function openDelete(cls) {
+  delTarget = cls;
+  $("delTitle").textContent = cls ? `${cls}のデータを削除します` : "全データを削除します";
+  $("delWhat").textContent = cls ? `${cls}の写真がすべて消えます（ほかのクラスは消えません）。` : "全クラスの写真がすべて消えます。";
+  $("delInput").value = "";
+  $("delYes").disabled = true;
+  $("delDlg").showModal();
+}
+$("delCls").onclick = () => openDelete(current);
+$("delAll").onclick = () => openDelete(null);
 $("delInput").oninput = () => { $("delYes").disabled = $("delInput").value.trim() !== "さくじょ"; };
 $("delNo").onclick = () => $("delDlg").close();
 $("delYes").onclick = async () => {
   $("delYes").disabled = true;
   $("delYes").textContent = "削除中…";
   try {
-    await backend.deleteAll();
+    await backend.deletePhotos(delTarget);
     $("delDlg").close();
     load();
   } catch (e) {

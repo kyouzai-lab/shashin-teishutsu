@@ -72,9 +72,10 @@ export async function compressImage(file, maxSide = 1200, maxBytes = 600 * 1024)
 function withTimeout(p, ms) {
   return Promise.race([p, new Promise((_, rej) => setTimeout(() => rej(new Error("timeout")), ms))]);
 }
-function allPhotoIds() {
+// cls を渡すとそのクラスだけ、渡さないと全クラスの写真ID
+function photoIds(cls) {
   const ids = [];
-  for (const c of CLASSES)
+  for (const c of CLASSES.filter(c => !cls || c.id === cls))
     for (let no = 1; no <= MAX_NO; no++)
       for (let i = 1; i <= PHOTO_COUNT; i++) ids.push(photoId(c.id, no, i));
   return ids;
@@ -128,9 +129,9 @@ const firebaseBackend = {
       };
     });
   },
-  async deleteAll() {
+  async deletePhotos(cls) {
     const { fs, db } = await fb();
-    const ids = allPhotoIds();
+    const ids = photoIds(cls);
     for (let s = 0; s < ids.length; s += 450) {
       const batch = fs.writeBatch(db);
       ids.slice(s, s + 450).forEach(id => batch.delete(fs.doc(db, "photos", id)));
@@ -213,8 +214,8 @@ const demoBackend = {
     const all = await idb("readonly", st => st.getAll());
     return (all || []).filter(v => v.cls === cls && v.w > 0);
   },
-  async deleteAll() {
-    await idb("readwrite", st => { st.clear(); });
+  async deletePhotos(cls) {
+    await idb("readwrite", st => { if (cls) photoIds(cls).forEach(id => st.delete(id)); else st.clear(); });
   },
   // お試し用：クラスごとに何人か抜けた状態のサンプル写真を入れる
   async fillSample() {
